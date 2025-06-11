@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plano de Estudo - Delegado PF</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <!-- Visualization & Content Choices:
+        - Distribuição de Tempo: Chart.js Donut (Goal: Inform, Compare) -> Mostrar alocação para disciplinas prioritárias (Admin, Penal, Proc Penal, Const).
+        - Cronograma Semanal: HTML Table/Lists + JS Tabs (Goal: Organize, Inform) -> Apresentar tópicos diários/semanais de forma clara e interativa (seleção de semana).
+        - Tópicos do Edital: HTML Lists/Acordeões + Botão de Gerar Questão (Goal: Organize, Inform, Engage) -> Detalhar conteúdo programático por disciplina e permitir a geração de questões discursivas via Gemini API.
+        - Legislação: HTML Table (Goal: Inform, Organize) -> Listar normas relevantes.
+        - Textos (Introdução, Metodologia): HTML Paragraphs/Headings (Goal: Inform) -> Fornecer contexto e orientação.
+        Justificativa: Escolhas visam clareza, organização e facilidade de uso. Interações simples para navegação. A adição do gerador de questões discursivas diretamente no edital permite uma prática contextualizada e aprofundada, utilizando o poder do LLM para criar cenários de prova.
+        Bibliotecas: Chart.js para gráficos. Tailwind CSS para layout e componentes. Vanilla JS para interatividade. Gemini API para geração de texto.
+    -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Custom scrollbar for webkit browsers */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 400px; /* Adjusted for donut chart */
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px; /* Base height */
+            max-height: 350px; /* Max height */
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+                max-height: 400px;
+            }
+        }
+        .tab-button.active {
+            background-color: #4f46e5; /* indigo-600 */
+            color: white;
+        }
+        .tab-button {
+            transition: background-color 0.3s ease;
+        }
+        .section-fade-in {
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fadeIn 0.8s forwards;
+        }
+        @keyframes fadeIn {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        /* Custom checkbox style */
+        .custom-checkbox:checked + label:before {
+            background-color: #4f46e5; /* indigo-600 */
+            border-color: #4f46e5;
+        }
+        .custom-checkbox:checked + label:after {
+            content: '\\2713'; /* Checkmark unicode */
+            position: absolute;
+            left: 4px;
+            top: 0px;
+            color: white;
+            font-size: 14px;
+        }
+        label.task-completed {
+            text-decoration: line-through;
+            color: #6b7280; /* gray-500 */
+        }
+
+        /* Modal styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+        .modal-overlay.show {
+            opacity: 1;
+            visibility: visible;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+            max-width: 800px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+            transform: translateY(-20px);
+            transition: transform 0.3s ease;
+        }
+        .modal-overlay.show .modal-content {
+            transform: translateY(0);
+        }
+        .modal-close-button {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #6b7280;
+        }
+        .modal-close-button:hover {
+            color: #374151;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800">
+
+    <header class="bg-indigo-700 text-white p-6 shadow-lg sticky top-0 z-50">
+        <div class="container mx-auto flex flex-col sm:flex-row justify-between items-center">
+            <h1 class="text-3xl font-bold mb-2 sm:mb-0"><i class="fas fa-balance-scale mr-2"></i>Plano de Estudo - Delegado PF</h1>
+            <nav>
+                <a href="#introducao" class="px-3 py-2 hover:bg-indigo-600 rounded-md">Introdução</a>
+                <a href="#cronograma" class="px-3 py-2 hover:bg-indigo-600 rounded-md">Cronograma</a>
+                <a href="#edital" class="px-3 py-2 hover:bg-indigo-600 rounded-md">Edital</a>
+                <a href="#legislacao" class="px-3 py-2 hover:bg-indigo-600 rounded-md">Legislação</a>
+                <a href="#metodologia" class="px-3 py-2 hover:bg-indigo-600 rounded-md">Dicas</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container mx-auto p-4 md:p-8">
+
+        <section id="introducao" class="mb-12 bg-white p-6 rounded-xl shadow-xl section-fade-in">
+            <h2 class="text-3xl font-semibold text-indigo-700 mb-6 border-b-2 border-indigo-200 pb-2"><i class="fas fa-bullseye mr-2"></i>Introdução e Estratégia</h2>
+            <p class="mb-4 text-lg leading-relaxed">
+                Bem-vindo(a) ao seu plano de estudos intensivo para o concurso de Delegado da Polícia Federal! Com 4 horas diárias e um prazo de dois meses (26/05/2025 a 27/07/2025), este cronograma foi elaborado para maximizar seu desempenho, com ênfase especial nas disciplinas de Direito Administrativo, Penal, Processual Penal e Constitucional, cruciais para as questões discursivas.
+            </p>
+            <p class="mb-6 text-lg leading-relaxed">
+                A estratégia é de estudo verticalizado nas matérias prioritárias e horizontalizado nas demais, visando uma preparação completa e focada para você alcançar a maior nota possível. Lembre-se, a disciplina e a consistência são suas maiores aliadas!
+            </p>
+            <div class="grid md:grid-cols-2 gap-6 items-center">
+                <div>
+                    <h3 class="text-2xl font-semibold text-indigo-600 mb-3">Distribuição Semanal Sugerida (Disciplinas Prioritárias)</h3>
+                    <p class="mb-4 text-gray-700">
+                        As 28 horas semanais (4h/dia) serão focadas nas seguintes disciplinas prioritárias, conforme detalhado no cronograma. Este gráfico ilustra a proporção de tempo dedicada a cada uma delas dentro deste bloco principal.
+                    </p>
+                    <ul class="list-disc list-inside text-gray-700 space-y-1">
+                        <li><strong>Direito Administrativo:</strong> 8 horas/semana (28.6%)</li>
+                        <li><strong>Direito Penal:</strong> 8 horas/semana (28.6%)</li>
+                        <li><strong>Direito Processual Penal:</strong> 6 horas/semana (21.4%)</li>
+                        <li><strong>Direito Constitucional:</strong> 6 horas/semana (21.4%)</li>
+                    </ul>
+                </div>
+                <div class="chart-container">
+                    <canvas id="distribuicaoTempoChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <section id="cronograma" class="mb-12 bg-white p-6 rounded-xl shadow-xl section-fade-in" style="animation-delay: 0.2s;">
+            <h2 class="text-3xl font-semibold text-indigo-700 mb-6 border-b-2 border-indigo-200 pb-2"><i class="fas fa-calendar-alt mr-2"></i>Cronograma Detalhado (26/05/2025 a 27/07/2025)</h2>
+            <div class="mb-6">
+                <p class="text-lg leading-relaxed">Navegue pelas semanas para ver os tópicos de estudo e atividades planejadas. Marque as tarefas como concluídas para acompanhar seu progresso visualmente (esta marcação é local e será reiniciada ao recarregar a página).</p>
+            </div>
+            <div id="tabs-container" class="mb-6 flex flex-wrap gap-2">
+                </div>
+            <div id="cronograma-content" class="bg-slate-50 p-6 rounded-lg border border-slate-200 min-h-[300px]">
+                <p class="text-center text-gray-500">Selecione uma semana para ver os detalhes.</p>
+            </div>
+        </section>
+
+        <section id="edital" class="mb-12 bg-white p-6 rounded-xl shadow-xl section-fade-in" style="animation-delay: 0.4s;">
+            <h2 class="text-3xl font-semibold text-indigo-700 mb-6 border-b-2 border-indigo-200 pb-2"><i class="fas fa-file-alt mr-2"></i>Análise do Edital</h2>
+            <p class="mb-6 text-lg leading-relaxed">Conhecer o edital é fundamental. Abaixo, você encontra os principais tópicos das disciplinas cobradas. Utilize os botões para expandir e ver o conteúdo de cada matéria e para gerar questões discursivas.</p>
+            <div id="edital-accordion" class="space-y-3">
+                </div>
+        </section>
+
+        <section id="legislacao" class="mb-12 bg-white p-6 rounded-xl shadow-xl section-fade-in" style="animation-delay: 0.6s;">
+            <h2 class="text-3xl font-semibold text-indigo-700 mb-6 border-b-2 border-indigo-200 pb-2"><i class="fas fa-gavel mr-2"></i>Legislação e Jurisprudência Essencial</h2>
+            <p class="mb-6 text-lg leading-relaxed">
+                Mantenha-se atualizado! Algumas leis e decretos são cruciais e frequentemente cobrados. Acompanhe também os informativos do STF e STJ.
+            </p>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-indigo-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-indigo-600 uppercase tracking-wider">Norma</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-indigo-600 uppercase tracking-wider">Data</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-indigo-600 uppercase tracking-wider">Disciplinas Relacionadas</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-indigo-600 uppercase tracking-wider">Relevância</th>
+                        </tr>
+                    </thead>
+                    <tbody id="legislacao-table-body" class="bg-white divide-y divide-gray-200">
+                        </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="metodologia" class="mb-12 bg-white p-6 rounded-xl shadow-xl section-fade-in" style="animation-delay: 0.8s;">
+            <h2 class="text-3xl font-semibold text-indigo-700 mb-6 border-b-2 border-indigo-200 pb-2"><i class="fas fa-lightbulb mr-2"></i>Metodologia e Dicas de Estudo</h2>
+            <div class="grid md:grid-cols-2 gap-6">
+                <div class="bg-indigo-50 p-4 rounded-lg">
+                    <h3 class="text-xl font-semibold text-indigo-600 mb-2"><i class="fas fa-tasks mr-1"></i> Técnicas de Estudo Ativo</h3>
+                    <ul class="list-disc list-inside space-y-1 text-gray-700">
+                        <li>Ciclos de estudo curtos e focados.</li>
+                        <li>Flashcards para memorização de conceitos e leis.</li>
+                        <li>Mapas mentais e esquemas visuais.</li>
+                        <li>Revisão espaçada (24h, 3 dias, 7 dias, etc.).</li>
+                        <li>Resolução constante de questões objetivas.</li>
+                    </ul>
+                </div>
+                <div class="bg-teal-50 p-4 rounded-lg">
+                    <h3 class="text-xl font-semibold text-teal-600 mb-2"><i class="fas fa-pen-alt mr-1"></i> Estratégias para Discursivas</h3>
+                    <ul class="list-disc list-inside space-y-1 text-gray-700">
+                        <li>Análise de casos concretos e simulação de problemas.</li>
+                        <li>Prática de estruturação de respostas (introdução, desenvolvimento, conclusão).</li>
+                        <li>Atenção à linguagem jurídica e correção gramatical.</li>
+                        <li>Busque feedback qualificado, se possível.</li>
+                        <li>Treine a escrita sob pressão de tempo.</li>
+                    </ul>
+                </div>
+                <div class="bg-amber-50 p-4 rounded-lg">
+                    <h3 class="text-xl font-semibold text-amber-600 mb-2"><i class="fas fa-clock mr-1"></i> Gestão do Tempo e Produtividade</h3>
+                    <ul class="list-disc list-inside space-y-1 text-gray-700">
+                        <li>Divida as 4h em blocos (ex: Técnica Pomodoro).</li>
+                        <li>Crie um ambiente de estudo livre de distrações.</li>
+                        <li>Mantenha uma rotina consistente de horários.</li>
+                        <li>Defina metas diárias e priorize-as.</li>
+                    </ul>
+                </div>
+                <div class="bg-rose-50 p-4 rounded-lg">
+                    <h3 class="text-xl font-semibold text-rose-600 mb-2"><i class="fas fa-heartbeat mr-1"></i> Saúde Mental e Física</h3>
+                    <ul class="list-disc list-inside space-y-1 text-gray-700">
+                        <li>Faça pausas regulares durante o estudo.</li>
+                        <li>Garanta sono adequado e reparador.</li>
+                        <li>Mantenha uma alimentação saudável e hidrate-se.</li>
+                        <li>Pratique atividades físicas regularmente.</li>
+                        <li>Lembre-se: é uma maratona, não um sprint!</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="mt-6 p-4 bg-slate-100 rounded-lg border border-slate-300">
+                 <h3 class="text-xl font-semibold text-slate-700 mb-2"><i class="fas fa-check-circle mr-1"></i> Recomendações Finais</h3>
+                 <p class="text-gray-700 leading-relaxed">Adapte este cronograma à sua realidade. Realize simulados completos e analise seu desempenho para ajustar o foco. Cultive a confiança e a resiliência. Sua dedicação fará a diferença!</p>
+            </div>
+        </section>
+    </main>
+
+    <div id="questionModal" class="modal-overlay">
+        <div class="modal-content">
+            <button class="modal-close-button" onclick="closeModal()">&times;</button>
+            <h3 class="text-2xl font-semibold text-indigo-700 mb-4" id="modalTitle">Questão Discursiva</h3>
+            <div id="questionContent" class="text-lg text-gray-800 leading-relaxed">
+                <p id="loadingIndicator" class="text-center text-gray-500 hidden">Gerando questão... <i class="fas fa-spinner fa-spin ml-2"></i></p>
+                <p id="generatedQuestion"></p>
+                <p id="errorQuestion" class="text-red-600 hidden">Ocorreu um erro ao gerar a questão. Tente novamente.</p>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bg-indigo-800 text-indigo-200 text-center p-6 mt-12">
+        <p>&copy; 2025 Plano de Estudo Delegado PF. Todos os direitos reservados (simulados).</p>
+        <p class="text-sm">Foco, força e fé na sua jornada!</p>
+    </footer>
+
+<script>
+    const cronogramaData = [
+        {
+            semana: 1,
+            periodo: "26/05 - 01/06",
+            disciplinas: [
+                { nome: "Direito Constitucional (DC)", topicos: "Conceito, Constituição (sentidos, classificações, normas), Poder Constituinte." },
+                { nome: "Direito Penal (DP)", topicos: "Introdução (conceito, princípios, lei penal no tempo/espaço), Teoria Geral do Crime (conduta, tipicidade, culpabilidade)." },
+                { nome: "Direito Administrativo (DA)", topicos: "Introdução (conceito, objeto, fontes, princípios), Administração Pública (conceito, órgãos, servidores, competência)." }
+            ],
+            complementar: [
+                { nome: "Direitos Humanos (DH)", topicos: "Teoria Geral, Afirmação Histórica, Globalização." },
+                { nome: "Criminologia (Crim)", topicos: "Conceito, Métodos, Objetos." }
+            ],
+            atividades: "20 questões objetivas/dia (DC/DP/DA). 1h prática discursiva (DC). Revisão diária dos tópicos estudados."
+        },
+        {
+            semana: 2,
+            periodo: "02/06 - 08/06",
+            disciplinas: [
+                { nome: "Direito Constitucional (DC)", topicos: "Controle de Constitucionalidade (conceito, sistemas, inconstitucionalidade, sistema brasileiro)." },
+                { nome: "Direito Penal (DP)", topicos: "Teoria do Tipo (doloso, culposo, erro de tipo, classificação, iter criminis, consumação, tentativa, desistência, arrependimento)." },
+                { nome: "Direito Administrativo (DA)", topicos: "Atos Administrativos (conceitos, requisitos, elementos, classificação, espécies, Lei nº 9.784/1999, teoria das nulidades)." }
+            ],
+            complementar: [
+                { nome: "Direitos Humanos (DH)", topicos: "Proteção Internacional, D. Humanitário e Refugiados, Interligação D. Internacional e D. Interno." },
+                { nome: "Direito Processual Civil (DPC)", topicos: "Jurisdição (natureza, conceito, espécies, princípios)." }
+            ],
+            atividades: "20 questões objetivas/dia (DC/DP/DA). 1h prática discursiva (DA). Revisão diária."
+        },
+        {
+            semana: 3,
+            periodo: "09/06 - 15/06",
+            disciplinas: [
+                { nome: "Direito Constitucional (DC)", topicos: "Fundamentos Constitucionais dos Direitos e Deveres Fundamentais (individuais, coletivos, sociais, nacionalidade, cidadania, políticos, partidos, garantias, remédios)." },
+                { nome: "Direito Penal (DP)", topicos: "Ilicitude (causas de exclusão), Teoria Geral da Culpabilidade (fundamentos, elementos, causas de exclusão, imputabilidade, erro de proibição)." },
+                { nome: "Direito Administrativo (DA)", topicos: "Poderes da Administração Pública (hierárquico, disciplinar, de polícia, judiciária e administrativa, liberdades públicas)." }
+            ],
+            complementar: [
+                { nome: "Direitos Humanos (DH)", topicos: "DH na CF/88, Sistema Internacional, Reflexos no D. Brasileiro, Programas Nacionais." },
+                { nome: "Direito Processual Civil (DPC)", topicos: "Jurisdição Constitucional das Liberdades (HC, MS, HD, Ação Popular, ACP)." }
+            ],
+            atividades: "20 questões objetivas/dia (DC/DP/DA). 1h prática discursiva (DP). Revisão diária."
+        },
+        {
+            semana: 4,
+            periodo: "16/06 - 22/06",
+            disciplinas: [
+                { nome: "Direito Constitucional (DC)", topicos: "Poder Legislativo, Processo Legislativo, Poder Executivo (forma/sistema, chefia, atribuições PR)." },
+                { nome: "Direito Penal (DP)", topicos: "Concurso de Agentes, Teoria Geral da Pena (cominação, privativas, restritivas, regimes, pecuniária, medidas de segurança, aplicação, fins, livramento, suspensão, efeitos, execução)." },
+                { nome: "Direito Administrativo (DA)", topicos: "Serviços Públicos (concessão, permissão, autorização, delegação, conceito, caracteres, classificação, garantias, extinção). Intervenção no Domínio Econômico (desapropriação)." }
+            ],
+            complementar: [
+                { nome: "Direito Internacional Público e Coop. Int. (DIPCI)", topicos: "D. Internacional Público (conceito, fontes, princípios), Atos Internacionais (tratados, validade, efeitos, ratificação, incorporação, violação, conflito, extinção)." },
+                { nome: "Direito Civil (DCiv)", topicos: "Lei de Introdução, Pessoa Natural/Jurídica, Bens, Fatos Jurídicos, Prescrição/Decadência." }
+            ],
+            atividades: "20 questões objetivas/dia (DC/DP/DA). 1h prática discursiva (DC). Revisão semanal dos tópicos anteriores."
+        },
+        {
+            semana: 5,
+            periodo: "23/06 - 29/06",
+            disciplinas: [
+                { nome: "Direito Constitucional (DC)", topicos: "Poder Judiciário (disposições gerais, STF, STJ, TRFs, Juízes Estaduais, Funções Essenciais à Justiça). Defesa do Estado (Segurança Pública, Organização da Segurança Pública, Atribuições Constitucionais da PF)." },
+                { nome: "Direito Penal (DP)", topicos: "Extinção da Punibilidade (conceito, causas, prescrição). Crimes contra a Pessoa, Patrimônio, Propriedade Imaterial/Intelectual, Organização do Trabalho, Sentimento Religioso, Dignidade Sexual, Família, Incolumidade Pública, Paz Pública, Fé Pública, Administração Pública, Finanças Públicas." },
+                { nome: "Direito Administrativo (DA)", topicos: "Licitações (conceito, finalidades, princípios, objeto, obrigatoriedade, dispensa, inexigibilidade, vedação, modalidades, procedimento, Lei nº 14.133/2021). Contratos Administrativos (conceito, peculiaridades, formalização, execução, rescisão)." }
+            ],
+            complementar: [
+                { nome: "Direito Internacional Público e Coop. Int. (DIPCI)", topicos: "Personalidade Internacional (Estado, imunidade, organizações internacionais, população, nacionalidade, estrangeiros, extradição, asilo)." },
+                { nome: "Direito Civil (DCiv)", topicos: "Posse, Propriedade (aquisição, perda, responsabilidade civil)." }
+            ],
+            atividades: "20 questões objetivas/dia (DC/DP/DA). 1h prática discursiva (DA). Revisão diária."
+        },
+        {
+            semana: 6,
+            periodo: "30/06 - 06/07",
+            disciplinas: [
+                { nome: "Direito Processual Penal (DPP)", topicos: "Inquérito Policial (histórico, natureza, finalidade, características, fundamento, titularidade, valor probatório, instauração, notitia criminis, delatio criminis, procedimentos investigativos, indiciamento, garantias, conclusão, prazos). Atribuições da PF na persecução criminal (Lei nº 10.446/2002, jurisdição, competência, conexão, continência, prevenção, questões incidentes, competência da Justiça Federal, TRFs, STJ, STF, conflito de competência)." },
+                { nome: "Direito Penal (DP)", topicos: "Leis Penais Especiais (Lei nº 11.343/2006 - Drogas, Lei nº 12.850/2013 - Crime Organizado, Lei nº 7.492/1986 - Sistema Financeiro, Lei nº 8.137/1990 - Ordem Econômica/Tributária, Lei nº 9.613/1998 - Lavagem de Dinheiro, Lei nº 8.072/1990 - Crimes Hediondos)." },
+                { nome: "Direito Administrativo (DA)", topicos: "Controle da Administração Pública (conceito, tipos, formas, interno, externo, parlamentar, tribunais de contas, administrativo, recursos, reclamação, Lei nº 8.429/1992). Sistemas de controle jurisdicional, Controle da Atividade Financeira, TCU, Sistema de Correição (Decreto nº 5.480/2005, Decreto nº 11.102/2022, Portaria Normativa CGU n.º 27/2022, IN CGU nº 14/2018)." }
+            ],
+            complementar: [
+                { nome: "Direito Empresarial (DE)", topicos: "D. Comercial (origem, evolução, autonomia, fontes), Empresário, Teoria Geral dos Títulos de Crédito." },
+                { nome: "Direito Previdenciário (DPrev)", topicos: "Seguridade Social (conceito, disciplina constitucional, princípios, objetivos), Financiamento da Seguridade Social." }
+            ],
+            atividades: "20 questões objetivas/dia (DPP/DP/DA). 1h prática discursiva (DPP). Revisão diária."
+        },
+        {
+            semana: 7,
+            periodo: "07/07 - 13/07",
+            disciplinas: [
+                { nome: "Direito Processual Penal (DPP)", topicos: "Processo Criminal (finalidade, pressupostos, sistemas), Ação Penal (conceito, características, espécies, condições), Sujeitos do Processo. Juizados Especiais Criminais, Termo Circunstanciado, Atos Processuais. Provas (conceito, objeto, classificação, sistemas, princípios, procedimento, valoração, ônus, ilícitas, meios de prova, busca e apreensão)." },
+                { nome: "Direito Penal (DP)", topicos: "Leis Penais Especiais (Lei nº 7.716/1989 - Preconceito, Lei nº 9.455/1997 - Tortura, Lei nº 9.605/1998 - Meio Ambiente, Crimes de Responsabilidade, Lei nº 11.101/2005 - Crimes Falimentares, Lei nº 14.133/2021 - Licitações, Lei nº 13.869/2019 - Abuso de Autoridade, Lei nº 10.826/2003 - Desarmamento, e outras relevantes)." },
+                { nome: "Direito Administrativo (DA)", topicos: "Agentes Públicos (conceito, natureza, preceitos constitucionais, servidor efetivo/vitalício, estágio probatório, cargo em comissão, direitos, deveres, responsabilidades, Lei nº 8.112/1990, Lei nº 4.878/1965, Lei nº 15.047/2024, regime disciplinar, PAD, improbidade administrativa, Lei nº 8.429/1992). Bens Públicos. Responsabilidade Civil do Estado. Direito Administrativo Disciplinar. Controle e Fiscalização de Segurança Privada (Lei nº 14.967/2024)." }
+            ],
+            complementar: [
+                { nome: "Direito Financeiro e Tributário (DFT)", topicos: "Finanças Públicas na CF/88 (Orçamento, princípios, controle), Despesa Pública, Receita Pública, Dívida Ativa/Pública." },
+                { nome: "Direito Ambiental (DAmb)", topicos: "Princípios, CF e Meio Ambiente, Repartição de Competências, Poder de Polícia e D. Ambiental, Licenciamento, Infrações, Responsabilidade Ambiental, SNUC, Política Nacional do Meio Ambiente, EIA, Biodiversidade, Proteção Florestas, APP/UC, Crimes Ambientais." }
+            ],
+            atividades: "20 questões objetivas/dia (DPP/DP/DA). 1h prática discursiva (DA). Revisão diária."
+        },
+        {
+            semana: 8,
+            periodo: "14/07 - 20/07",
+            disciplinas: [
+                { nome: "Direito Processual Penal (DPP)", topicos: "Prisão (conceito, espécies, mandado, flagrante, temporária, preventiva, necessidade, especial, liberdade provisória, fiança). Sentença Criminal (juiz, MP, acusado, defensor, citação, intimação, crimes de responsabilidade, sentença, coisa julgada, HC, MS em matéria criminal). Processo Criminal de Crimes Comuns (Leis Especiais – mesmas do Penal, mais Lei nº 9.296/1996 - Interceptação Telefônica, Lei nº 12.830/2013, Lei nº 12.737/2012 - Crimes Cibernéticos). Jurisprudência e Súmulas." },
+                { nome: "Direito Internacional Público e Coop. Int. (DIPCI)", topicos: "Proteção Internacional dos Direitos Humanos (DUDH, direitos, mecanismos), Conflitos Internacionais, Domínio Público Internacional. Cooperação Internacional (espécies, procedimentos), Cooperação Policial Internacional, Cooperação Jurídica Internacional em Matéria Penal. Leis e Decretos Específicos (Lei nº 13.445/2017, Decretos relevantes, Artigos 26-41 do CPC)." },
+                { nome: "Criminologia (Crim)", topicos: "Funções da Criminologia (Criminologia e Política Criminal, Direito Penal), Modelos Teóricos (Teorias Sociológicas), Prevenção da Infração Penal (primária, secundária, terciária), Modelos de Reação ao Crime." }
+            ],
+            complementar: [
+                { nome: "Direito Empresarial (DE)", topicos: "Espécies de Empresa, Teoria Geral do Direito Societário, Recuperação Judicial/Extrajudicial, Falência. Sistema Financeiro Nacional." },
+                { nome: "Direito Previdenciário (DPrev)", topicos: "Regime Geral de Previdência Social. Decadência e Prescrição. Crimes contra a Seguridade/Previdência Social." },
+                { nome: "Direito Financeiro e Tributário (DFT)", topicos: "Sistema Tributário Nacional. Fontes do D. Tributário. Obrigação Principal/Acessória. Crédito Tributário. Impostos Federais. Administração Tributária." }
+            ],
+            atividades: "Revisão intensiva dos tópicos mais importantes de todas as matérias. Simulado completo (objetivo e discursivo) com correção detalhada."
+        },
+        {
+            semana: 9,
+            periodo: "21/07 - 27/07 (Últimos Dias)",
+            disciplinas: [
+                { nome: "Revisão Final Geral", topicos: "Foco em súmulas, artigos de lei mais importantes, anotações pessoais e pontos de maior dificuldade identificados nos simulados." },
+                { nome: "Atualização Jurisprudencial", topicos: "Leitura de informativos recentes dos tribunais superiores (STF/STJ)." }
+            ],
+            complementar: [],
+            atividades: "Descanso adequado, alimentação leve e hidratação. Evitar novos conteúdos. Preparação mental e logística para o dia da prova."
+        }
+    ];
+
+    const editalData = {
+        "Direito Administrativo": [
+            "1. Introdução ao direito administrativo: critérios, objeto, fontes, regime jurídico-administrativo, princípios.",
+            "2. Administração pública: conceito, órgãos, servidores, competência, avocação/delegação, administração direta/indireta, autarquias, fundações, empresas públicas/mistas, entidades paraestatais, CF/88.",
+            "3. Atos administrativos: conceitos, requisitos, elementos, classificação, espécies, parecer, silêncio, cassação, revogação, anulação, processo administrativo (Lei nº 9.784/1999).",
+            "4. Poderes da administração: vinculado, discricionário, hierárquico, disciplinar, regulamentar, de polícia (conceito, polícia judiciária e administrativa, liberdades públicas e poder de polícia).",
+            "5. Improbidade Administrativa: Lei nº 8.429/1992 e alterações.",
+            "6. Serviços públicos: conceito, caracteres, classificação, regulamentação, controle, formas de prestação, concessão, permissão, autorização, parceria público-privada.",
+            "7. Licitações e contratos administrativos: Lei nº 14.133/2021 (conceito, finalidades, princípios, dispensa, inexigibilidade, modalidades, procedimento, contratos, sanções). Crimes em licitações.",
+            "8. Intervenção do Estado na propriedade: fundamentos, modalidades (servidão, requisição, ocupação temporária, limitação, tombamento), desapropriação.",
+            "9. Controle da administração pública: conceito, tipos, formas (interno, externo, parlamentar, tribunais de contas, administrativo, judicial). Mandado de Segurança, Ação Popular, Ação Civil Pública.",
+            "10. Agentes públicos: espécies, classificação, cargo, emprego, função, direitos, deveres, responsabilidades, regime disciplinar (Lei nº 8.112/1990, Lei nº 4.878/1965, Lei nº 15.047/2024).",
+            "11. Bens públicos: conceito, classificação, regime jurídico, afetação, desafetação, aquisição, alienação, uso.",
+            "12. Responsabilidade civil do Estado: evolução, teorias, responsabilidade objetiva e subjetiva, reparação do dano, ação regressiva.",
+            "13. Direito Administrativo Disciplinar: fontes, princípios, ilícito administrativo, sindicância, PAD.",
+            "14. Controle e Fiscalização de Segurança Privada: Lei nº 14.967/2024 e atribuições da PF.",
+            "15. Sistema de Correição do Poder Executivo Federal: Decreto nº 5.480/2005, Decreto nº 11.102/2022, Portaria Normativa CGU n.º 27/2022 (e alterações)."
+        ],
+        "Direito Constitucional": [
+            "1. Constituição: conceito, sentidos, classificações, elementos, hermenêutica constitucional.",
+            "2. Poder Constituinte: originário, derivado, decorrente. Reforma e revisão constitucional.",
+            "3. Aplicabilidade e interpretação das normas constitucionais. Vigência e eficácia.",
+            "4. Controle de constitucionalidade: conceito, sistemas (difuso, concentrado), inconstitucionalidade (por ação, por omissão), ADI, ADC, ADPF, ADO, MI.",
+            "5. Direitos e garantias fundamentais: teoria geral, direitos e deveres individuais e coletivos, direitos sociais, nacionalidade, cidadania, direitos políticos, partidos políticos. Remédios constitucionais (HC, MS, MI, HD, Ação Popular).",
+            "6. Organização do Estado: federalismo, União, Estados, Municípios, DF, Territórios. Repartição de competências.",
+            "7. Administração Pública na Constituição: princípios, servidores públicos.",
+            "8. Poder Legislativo: estrutura, funcionamento, processo legislativo, fiscalização contábil, financeira e orçamentária.",
+            "9. Poder Executivo: Presidente da República (atribuições, responsabilidade), Ministros de Estado.",
+            "10. Poder Judiciário: disposições gerais, órgãos (STF, STJ, TRFs, Juízes Federais, etc.), garantias da magistratura, funções essenciais à justiça (MP, Advocacia Pública, Defensoria Pública, Advocacia).",
+            "11. Defesa do Estado e das instituições democráticas: estado de defesa, estado de sítio, segurança pública (art. 144), Forças Armadas. Atribuições constitucionais da Polícia Federal.",
+            "12. Ordem social: seguridade social, educação, cultura, desporto, ciência e tecnologia, comunicação social, meio ambiente, família, criança, adolescente, idoso, índios."
+        ],
+        "Direito Penal": [
+            "1. Princípios básicos do Direito Penal. A lei penal no tempo e no espaço.",
+            "2. Teoria geral do crime: conceito, sujeitos, objeto, classificação. Relação de causalidade. Superveniência de causa independente.",
+            "3. Fato típico: conduta (dolosa, culposa, preterdolosa, omissiva), resultado, nexo causal, tipicidade. Erro de tipo. Crime consumado e tentado. Desistência voluntária e arrependimento eficaz. Arrependimento posterior. Crime impossível.",
+            "4. Ilicitude e causas de exclusão: estado de necessidade, legítima defesa, estrito cumprimento do dever legal, exercício regular de direito. Excesso punível. Erro de proibição.",
+            "5. Culpabilidade: conceito, elementos, causas de exclusão. Imputabilidade penal. Concurso de agentes.",
+            "6. Penas: espécies, cominação, aplicação, suspensão condicional, livramento condicional, efeitos da condenação, reabilitação. Medidas de segurança.",
+            "7. Ação penal: pública, privada. Extinção da punibilidade: causas, prescrição.",
+            "8. Crimes em espécie: contra a pessoa, patrimônio, propriedade imaterial, organização do trabalho, sentimento religioso e respeito aos mortos, dignidade sexual, família, incolumidade pública, paz pública, fé pública, administração pública, finanças públicas.",
+            "9. Leis penais especiais: Lei de Drogas (11.343/06), Crime Organizado (12.850/13), Lavagem de Dinheiro (9.613/98), Crimes Hediondos (8.072/90), Abuso de Autoridade (13.869/19), Crimes contra o Sistema Financeiro Nacional (7.492/86), Crimes contra a Ordem Tributária (8.137/90), Crimes Ambientais (9.605/98), Estatuto do Desarmamento (10.826/03), Crimes de Tortura (9.455/97), Crimes de Preconceito (7.716/89), Crimes Falimentares (11.101/05), Crimes em Licitações (Lei 14.133/21), Crimes Cibernéticos (Lei 12.737/12 e Convenção de Budapeste - Decreto 11.491/23), e outras relevantes do edital."
+        ],
+        "Direito Processual Penal": [
+            "1. Sistemas processuais penais. Princípios constitucionais e infraconstitucionais.",
+            "2. Inquérito policial: conceito, natureza, características, instauração, atribuições da autoridade policial, valor probatório, prazos, conclusão. Lei nº 12.830/2013.",
+            "3. Ação penal: conceito, espécies, condições, denúncia, queixa, representação, renúncia, perdão, perempção.",
+            "4. Jurisdição e competência: critérios de fixação, competência da Justiça Federal. Conexão e continência.",
+            "5. Provas: conceito, objeto, sistemas de valoração, ônus da prova, inadmissibilidade (provas ilícitas, ilegítimas). Meios de prova (perícia, interrogatório, confissão, testemunhas, reconhecimento, acareação, documentos, indícios, busca e apreensão). Interceptação telefônica (Lei 9.296/96). Colaboração premiada.",
+            "6. Sujeitos processuais: juiz, MP, acusado, defensor, assistentes, auxiliares da justiça. Impedimentos e suspeições.",
+            "7. Prisão e liberdade provisória: prisão em flagrante, preventiva, temporária (Lei 7.960/89). Medidas cautelares diversas da prisão. Fiança.",
+            "8. Atos processuais: forma, lugar, tempo, prazos, citação, intimação, notificação.",
+            "9. Procedimentos: comum (ordinário, sumário, sumaríssimo - Lei 9.099/95), especiais (crimes de responsabilidade de funcionários públicos, crimes contra a honra, etc.). Procedimentos relativos a crimes de competência do Tribunal do Júri.",
+            "10. Nulidades: conceito, espécies, princípios, arguição.",
+            "11. Sentença: requisitos, classificação, efeitos. Coisa julgada.",
+            "12. Recursos: teoria geral, espécies (apelação, RESE, embargos, etc.). Habeas Corpus e Mandado de Segurança em matéria criminal.",
+            "13. Execução penal (Lei 7.210/84): noções gerais.",
+            "14. Cooperação Jurídica Internacional em Matéria Penal.",
+            "15. Atribuições da Polícia Federal na persecução criminal (Lei nº 10.446/2002).",
+            "16. Uso da força e instrumentos de menor potencial ofensivo (Decreto nº 12.341/2024)."
+        ],
+        "Direitos Humanos": [
+            "1. Teoria geral dos Direitos Humanos: conceito, evolução histórica, características, classificações/gerações.",
+            "2. Afirmação histórica dos Direitos Humanos. A globalização e os Direitos Humanos.",
+            "3. Sistemas de proteção: internacional (global e regional - ONU, OEA), nacional.",
+            "4. Direitos Humanos na Constituição Federal de 1988. Tratados internacionais de DH e sua incorporação.",
+            "5. Principais instrumentos internacionais: DUDH, Pacto Internacional sobre Direitos Civis e Políticos, Pacto Internacional sobre Direitos Econômicos, Sociais e Culturais, Convenção Americana sobre Direitos Humanos (Pacto de San José da Costa Rica).",
+            "6. Direito Humanitário e Direito dos Refugiados.",
+            "7. Programas Nacionais de Direitos Humanos (PNDH).",
+            "8. Temas específicos: tortura, desaparecimento forçado, discriminação, direitos de grupos vulneráveis (mulheres, crianças, idosos, LGBTQIA+, povos indígenas, quilombolas, pessoas com deficiência)."
+        ],
+        "Criminologia": [
+            "1. Conceito, método, objeto e finalidade da Criminologia.",
+            "2. Evolução histórica da Criminologia. Escolas Criminológicas (Clássica, Positiva, Crítica, etc.).",
+            "3. Teorias sociológicas da criminalidade (Escola de Chicago, Teoria da Anomia, Teoria da Associação Diferencial, Teoria do Etiquetamento/Labelling Approach, etc.).",
+            "4. Vitimologia: conceito, classificação de vítimas, vitimização primária, secundária e terciária.",
+            "5. Prevenção da infração penal: primária, secundária e terciária. Modelos de reação ao crime.",
+            "6. Criminologia e Política Criminal. Criminologia e Direito Penal."
+        ],
+        "Direito Internacional Público e Cooperação Internacional": [
+            "1. Direito Internacional Público: conceito, fundamentos, fontes, sujeitos (Estados, Organizações Internacionais).",
+            "2. Tratados internacionais: conceito, classificação, processo de formação, incorporação ao direito interno brasileiro, interpretação, extinção.",
+            "3. Estado: elementos, reconhecimento, sucessão. Imunidades.",
+            "4. Domínio público internacional: mar territorial, zona contígua, ZEE, plataforma continental, alto-mar, espaço aéreo, espaço extra-atmosférico.",
+            "5. Solução pacífica de controvérsias internacionais. Uso da força.",
+            "6. Proteção internacional dos Direitos Humanos (aspectos de DIP).",
+            "7. Cooperação Jurídica Internacional: em matéria civil e penal (extradição, transferência de presos, auxílio direto, carta rogatória).",
+            "8. Cooperação Policial Internacional (Interpol, Ameripol, etc.).",
+            "9. Adidâncias da Polícia Federal no exterior (Decreto nº 12.337/2024).",
+            "10. Lei de Migração (Lei nº 13.445/2017). Condição jurídica do estrangeiro no Brasil.",
+            "11. Decretos relevantes sobre cooperação internacional (ex: Decretos 5.015, 5.016, 5.017/2004)."
+        ],
+         "Direito Civil": [
+            "1. Lei de Introdução às Normas do Direito Brasileiro (LINDB).",
+            "2. Pessoas naturais: personalidade, capacidade, direitos da personalidade, ausência.",
+            "3. Pessoas jurídicas: disposições gerais, classificações, desconsideração da personalidade jurídica.",
+            "4. Bens: diferentes classes.",
+            "5. Fatos jurídicos: negócio jurídico (existência, validade, eficácia, defeitos, invalidade), atos jurídicos lícitos e ilícitos.",
+            "6. Prescrição e decadência.",
+            "7. Obrigações: modalidades, transmissão, adimplemento e extinção, inadimplemento.",
+            "8. Contratos: disposições gerais, formação, vícios redibitórios, evicção, extinção. Principais espécies contratuais.",
+            "9. Responsabilidade civil: pressupostos, excludentes, dano material, moral e estético.",
+            "10. Coisas: posse, propriedade (aquisição, perda), direitos reais sobre coisas alheias (superfície, servidões, usufruto, etc.), direitos reais de garantia (penhor, hipoteca, anticrese)."
+        ],
+        "Direito Processual Civil": [
+            "1. Normas fundamentais do processo civil. Jurisdição e ação.",
+            "2. Competência: interna, internacional. Modificações da competência.",
+            "3. Sujeitos do processo: partes e procuradores, litisconsórcio, intervenção de terceiros.",
+            "4. Atos processuais: forma, tempo, lugar, prazos, comunicação (citação, intimação). Nulidades.",
+            "5. Tutela provisória: de urgência (cautelar e antecipada), de evidência.",
+            "6. Formação, suspensão e extinção do processo.",
+            "7. Procedimento comum: petição inicial, contestação, reconvenção, revelia, providências preliminares, saneamento, audiência de instrução e julgamento.",
+            "8. Provas: disposições gerais, ata notarial, depoimento pessoal, confissão, exibição de documento ou coisa, prova documental, testemunhal, pericial, inspeção judicial.",
+            "9. Sentença e coisa julgada.",
+            "10. Recursos: teoria geral, apelação, agravo de instrumento, embargos de declaração, recursos para STJ/STF (REsp, RE).",
+            "11. Mandado de Segurança individual e coletivo, Ação Popular, Ação Civil Pública (aspectos processuais).",
+            "12. Juizados Especiais Cíveis (Lei 9.099/95)."
+        ],
+        "Direito Empresarial": [
+            "1. Teoria geral do Direito Empresarial: empresa, empresário, estabelecimento.",
+            "2. Registro de empresa. Nome empresarial. Propriedade industrial (marcas, patentes).",
+            "3. Direito Societário: sociedades não personificadas e personificadas (simples, em nome coletivo, comandita simples, limitada, anônima). Transformação, incorporação, fusão e cisão.",
+            "4. Títulos de crédito: teoria geral, letra de câmbio, nota promissória, cheque, duplicata. Protesto.",
+            "5. Contratos mercantis: compra e venda mercantil, alienação fiduciária, factoring, franquia, leasing, representação comercial.",
+            "6. Recuperação judicial, extrajudicial e falência (Lei 11.101/2005).",
+            "7. Sistema Financeiro Nacional: estrutura, Banco Central, CVM."
+        ],
+        "Direito Previdenciário": [
+            "1. Seguridade Social: conceito, organização, princípios constitucionais.",
+            "2. Regime Geral de Previdência Social (RGPS - Lei 8.213/91 e Decreto 3.048/99): segurados (obrigatórios, facultativos), dependentes, carência, salário de benefício, benefícios (aposentadorias, pensão por morte, auxílios, salário-família, salário-maternidade).",
+            "3. Financiamento da Seguridade Social (Lei 8.212/91): contribuições sociais.",
+            "4. Decadência e prescrição previdenciária.",
+            "5. Crimes contra a Seguridade Social."
+        ],
+        "Direito Financeiro e Tributário": [
+            "1. Direito Financeiro: atividade financeira do Estado, orçamento público (princípios, elaboração, LDO, LOA, PPA), despesa pública, receita pública, dívida pública, crédito público.",
+            "2. Lei de Responsabilidade Fiscal (LC 101/2000).",
+            "3. Direito Tributário: Sistema Tributário Nacional (princípios, limitações ao poder de tributar, repartição de competências).",
+            "4. Tributo: conceito, espécies (impostos, taxas, contribuições de melhoria, empréstimos compulsórios, contribuições especiais).",
+            "5. Legislação tributária: fontes, vigência, aplicação, interpretação.",
+            "6. Obrigação tributária: principal e acessória, fato gerador, sujeito ativo e passivo, responsabilidade tributária.",
+            "7. Crédito tributário: constituição (lançamento), suspensão, extinção, exclusão.",
+            "8. Administração tributária: fiscalização, dívida ativa, certidões negativas.",
+            "9. Impostos da União (II, IE, IPI, IR, IOF, ITR, IGF), Estados (ICMS, IPVA, ITCMD), Municípios (ISS, IPTU, ITBI).",
+            "10. Simples Nacional."
+        ],
+        "Direito Ambiental": [
+            "1. Direito Ambiental: conceito, princípios, fontes. Meio ambiente na CF/88.",
+            "2. Competências em matéria ambiental (União, Estados, Municípios). SISNAMA e CONAMA.",
+            "3. Política Nacional do Meio Ambiente (Lei 6.938/81): objetivos, instrumentos (licenciamento ambiental, EIA/RIMA, zoneamento, SNUC).",
+            "4. Responsabilidade por danos ambientais: administrativa, civil (objetiva) e penal.",
+            "5. Tutela processual do meio ambiente: Ação Civil Pública, Ação Popular.",
+            "6. Unidades de Conservação (SNUC - Lei 9.985/2000). Áreas de Preservação Permanente (APP) e Reserva Legal (Código Florestal - Lei 12.651/2012).",
+            "7. Biodiversidade. Acesso ao patrimônio genético e conhecimento tradicional associado.",
+            "8. Crimes ambientais (Lei 9.605/98)."
+        ]
+    };
+
+    const legislacaoData = [
+        { norma: "Lei nº 14.133/2021", data: "01/04/2021", disciplinas: "Dir. Administrativo, Dir. Penal", relevancia: "Nova Lei de Licitações e Contratos. Fundamental." },
+        { norma: "Lei nº 15.047/2024", data: "17/12/2024", disciplinas: "Dir. Administrativo", relevancia: "Regime Disciplinar PF/PCDF. Recentíssima e crucial." },
+        { norma: "Lei nº 14.967/2024", data: "2024", disciplinas: "Dir. Administrativo", relevancia: "Estatuto da Segurança Privada. Atribuição da PF." },
+        { norma: "Decreto nº 12.341/2024", data: "23/12/2024", disciplinas: "DH, DPP, Dir. Admin.", relevancia: "Uso da força por agentes de segurança. Tema sensível." },
+        { norma: "Decreto nº 12.337/2024", data: "20/12/2024", disciplinas: "Dir. Admin., DIPCI", relevancia: "Adidâncias da PF no exterior. Cooperação internacional." },
+        { norma: "Decreto nº 11.491/2023", data: "12/04/2023", disciplinas: "Dir. Penal, DPP, DIPCI", relevancia: "Convenção sobre o Crime Cibernético (Budapeste)." },
+        { norma: "Lei nº 13.869/2019", data: "05/09/2019", disciplinas: "Dir. Penal, Dir. Admin.", relevancia: "Lei de Abuso de Autoridade." },
+        { norma: "Lei nº 12.850/2013", data: "02/08/2013", disciplinas: "Dir. Penal, DPP", relevancia: "Define organização criminosa e dispõe sobre investigação." },
+        { norma: "Lei nº 9.613/1998", data: "03/03/1998", disciplinas: "Dir. Penal, DPP", relevancia: "Lavagem de Dinheiro." },
+        { norma: "Portaria Normativa CGU nº 27/2022", data: "11/10/2022 (alt. 22/04/24)", disciplinas: "Dir. Administrativo", relevancia: "Sistema de Correição do Executivo Federal." }
+    ];
+
+    // Modal elements
+    const questionModal = document.getElementById('questionModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const generatedQuestion = document.getElementById('generatedQuestion');
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    const errorQuestion = document.getElementById('errorQuestion');
+
+    function showModal() {
+        questionModal.classList.add('show');
+    }
+
+    function closeModal() {
+        questionModal.classList.remove('show');
+        generatedQuestion.textContent = ''; // Clear previous question
+        errorQuestion.classList.add('hidden'); // Hide error
+    }
+
+    async function generateDiscursiveQuestion(disciplineName) {
+        showModal();
+        modalTitle.textContent = `Questão Discursiva de ${disciplineName}`;
+        generatedQuestion.textContent = '';
+        loadingIndicator.classList.remove('hidden');
+        errorQuestion.classList.add('hidden');
+
+        let chatHistory = [];
+        const prompt = `Gerar uma questão discursiva de concurso público para a disciplina de ${disciplineName}, com foco em um tópico relevante para o cargo de Delegado da Polícia Federal. A questão deve ser desafiadora e exigir conhecimento aprofundado.`;
+        chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+
+        const payload = { contents: chatHistory };
+        const apiKey = ""; // Canvas will provide this at runtime
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json();
+
+            if (result.candidates && result.candidates.length > 0 &&
+                result.candidates[0].content && result.candidates[0].content.parts &&
+                result.candidates[0].content.parts.length > 0) {
+                const text = result.candidates[0].content.parts[0].text;
+                generatedQuestion.textContent = text;
+            } else {
+                generatedQuestion.textContent = '';
+                errorQuestion.classList.remove('hidden');
+                console.error("Erro: Estrutura de resposta inesperada ou conteúdo ausente.", result);
+            }
+        } catch (error) {
+            generatedQuestion.textContent = '';
+            errorQuestion.classList.remove('hidden');
+            console.error("Erro ao chamar a Gemini API:", error);
+        } finally {
+            loadingIndicator.classList.add('hidden');
+        }
+    }
+
+
+    document.addEventListener('DOMContentLoaded', function () {
+        // Chart
+        const ctx = document.getElementById('distribuicaoTempoChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Direito Administrativo', 'Direito Penal', 'Direito Processual Penal', 'Direito Constitucional'],
+                datasets: [{
+                    label: 'Distribuição de Horas Semanais',
+                    data: [8, 8, 6, 6], // Horas
+                    backgroundColor: [
+                        'rgba(79, 70, 229, 0.7)',  // indigo-600
+                        'rgba(99, 102, 241, 0.7)', // indigo-500
+                        'rgba(129, 140, 248, 0.7)',// indigo-400
+                        'rgba(165, 180, 252, 0.7)' // indigo-300
+                    ],
+                    borderColor: [
+                        'rgba(79, 70, 229, 1)',
+                        'rgba(99, 102, 241, 1)',
+                        'rgba(129, 140, 248, 1)',
+                        'rgba(165, 180, 252, 1)'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed !== null) {
+                                    label += context.parsed + 'h (aprox. ' + ((context.parsed / 28) * 100).toFixed(1) + '%)';
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Cronograma Tabs
+        const tabsContainer = document.getElementById('tabs-container');
+        const cronogramaContent = document.getElementById('cronograma-content');
+
+        cronogramaData.forEach((semanaData, index) => {
+            const button = document.createElement('button');
+            button.className = 'tab-button px-4 py-2 text-sm sm:text-base font-medium rounded-md bg-slate-200 hover:bg-indigo-500 hover:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50';
+            button.textContent = `Semana ${semanaData.semana}` + (semanaData.semana === 9 ? " (Final)" : ` (${semanaData.periodo})`);
+            button.onclick = () => loadSemanaContent(semanaData, button);
+            tabsContainer.appendChild(button);
+            if (index === 0) { // Load first week by default
+                // loadSemanaContent(semanaData, button); // Defer to avoid issues on fast load
+            }
+        });
+        
+        // Set first tab as active after a slight delay to ensure DOM is ready
+        setTimeout(() => {
+            if (tabsContainer.children.length > 0) {
+                 tabsContainer.children[0].click();
+            }
+        }, 100);
+
+
+        function loadSemanaContent(semanaData, activeButton) {
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            activeButton.classList.add('active');
+
+            let contentHtml = `<h3 class="text-2xl font-semibold text-indigo-600 mb-4">Semana ${semanaData.semana}: ${semanaData.periodo}</h3>`;
+            
+            contentHtml += `<div class="mb-6 space-y-3">`;
+            semanaData.disciplinas.forEach((disc, idx) => {
+                const taskId = `semana${semanaData.semana}-disc${idx}`;
+                contentHtml += `
+                    <div class="bg-white p-3 rounded-md shadow-sm border border-indigo-100">
+                        <input type="checkbox" id="${taskId}" class="custom-checkbox mr-2 sr-only" onchange="toggleTask(this)">
+                        <label for="${taskId}" class="text-lg font-medium text-slate-700 cursor-pointer relative pl-6 before:content-[''] before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-4 before:h-4 before:border-2 before:border-gray-400 before:rounded-sm after:font-bold">
+                           ${disc.nome}
+                        </label>
+                        <p class="text-sm text-gray-600 ml-6 mt-1">${disc.topicos}</p>
+                    </div>`;
+            });
+            contentHtml += `</div>`;
+
+            if (semanaData.complementar && semanaData.complementar.length > 0) {
+                contentHtml += `<h4 class="text-xl font-semibold text-teal-600 mt-6 mb-2">Disciplinas/Tópicos Complementares:</h4>`;
+                contentHtml += `<div class="mb-6 space-y-3">`;
+                semanaData.complementar.forEach((comp, idx) => {
+                    const taskId = `semana${semanaData.semana}-comp${idx}`;
+                    contentHtml += `
+                        <div class="bg-white p-3 rounded-md shadow-sm border border-teal-100">
+                             <input type="checkbox" id="${taskId}" class="custom-checkbox mr-2 sr-only" onchange="toggleTask(this)">
+                             <label for="${taskId}" class="text-lg font-medium text-slate-700 cursor-pointer relative pl-6 before:content-[''] before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-4 before:h-4 before:border-2 before:border-gray-400 before:rounded-sm after:font-bold">
+                                ${comp.nome}
+                             </label>
+                             <p class="text-sm text-gray-600 ml-6 mt-1">${comp.topicos}</p>
+                        </div>`;
+                });
+                contentHtml += `</div>`;
+            }
+
+            contentHtml += `<h4 class="text-xl font-semibold text-amber-600 mt-6 mb-2">Atividades da Semana:</h4>`;
+            const taskIdAtividades = `semana${semanaData.semana}-atividades`;
+            contentHtml += `
+                <div class="bg-white p-3 rounded-md shadow-sm border border-amber-100">
+                    <input type="checkbox" id="${taskIdAtividades}" class="custom-checkbox mr-2 sr-only" onchange="toggleTask(this)">
+                    <label for="${taskIdAtividades}" class="text-lg font-medium text-slate-700 cursor-pointer relative pl-6 before:content-[''] before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-4 before:h-4 before:border-2 before:border-gray-400 before:rounded-sm after:font-bold">
+                        ${semanaData.atividades}
+                    </label>
+                </div>`;
+
+            cronogramaContent.innerHTML = contentHtml;
+        }
+        
+        window.toggleTask = function(checkbox) {
+            const label = checkbox.nextElementSibling;
+            if (checkbox.checked) {
+                label.classList.add('task-completed');
+            } else {
+                label.classList.remove('task-completed');
+            }
+        }
+
+
+        // Edital Accordion
+        const editalAccordion = document.getElementById('edital-accordion');
+        Object.keys(editalData).forEach((disciplina, index) => {
+            const accordionItem = `
+                <div>
+                    <button type="button" class="flex items-center justify-between w-full p-4 font-medium text-left text-slate-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 focus:ring-2 focus:ring-indigo-300" data-accordion-target="#accordion-body-${index}" aria-expanded="false" aria-controls="accordion-body-${index}">
+                        <span><i class="fas fa-book mr-2 text-indigo-500"></i>${disciplina}</span>
+                        <svg data-accordion-icon class="w-6 h-6 shrink-0" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
+                    </button>
+                    <div id="accordion-body-${index}" class="hidden p-5 border border-t-0 border-indigo-200 rounded-b-lg bg-white">
+                        <ul class="list-disc list-inside space-y-1 text-sm text-gray-600 mb-4">
+                            ${editalData[disciplina].map(topico => `<li>${topico}</li>`).join('')}
+                        </ul>
+                        <button onclick="generateDiscursiveQuestion('${disciplina}')" class="mt-2 px-4 py-2 bg-indigo-600 text-white font-semibold rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50">
+                            ✨ Gerar Questão Discursiva
+                        </button>
+                    </div>
+                </div>
+            `;
+            editalAccordion.innerHTML += accordionItem;
+        });
+
+        document.querySelectorAll('[data-accordion-target]').forEach(button => {
+            button.addEventListener('click', () => {
+                const targetId = button.getAttribute('data-accordion-target');
+                const targetPanel = document.querySelector(targetId);
+                const expanded = button.getAttribute('aria-expanded') === 'true' || false;
+                
+                button.setAttribute('aria-expanded', !expanded);
+                targetPanel.classList.toggle('hidden');
+                const icon = button.querySelector('[data-accordion-icon]');
+                icon.classList.toggle('rotate-180');
+            });
+        });
+        
+        // Legislação Table
+        const legislacaoTableBody = document.getElementById('legislacao-table-body');
+        legislacaoData.forEach(item => {
+            const row = `
+                <tr>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">${item.norma}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">${item.data}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">${item.disciplinas}</td>
+                    <td class="px-6 py-4 text-sm text-slate-500">${item.relevancia}</td>
+                </tr>
+            `;
+            legislacaoTableBody.innerHTML += row;
+        });
+
+        // Smooth scroll for nav links
+        document.querySelectorAll('header nav a').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const targetId = this.getAttribute('href');
+                const targetElement = document.querySelector(targetId);
+                if (targetElement) {
+                    const headerOffset = document.querySelector('header').offsetHeight;
+                    const elementPosition = targetElement.getBoundingClientRect().top;
+                    const offsetPosition = elementPosition + window.pageYOffset - headerOffset - 20; // 20px extra padding
+
+                    window.scrollTo({
+                        top: offsetPosition,
+                        behavior: "smooth"
+                    });
+                }
+            });
+        });
+
+        // Animate sections on scroll
+        const sections = document.querySelectorAll('.section-fade-in');
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.animationPlayState = 'running';
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.1 });
+
+        sections.forEach(section => {
+            observer.observe(section);
+        });
+
+    });
+</script>
+
+</body>
+</html>
